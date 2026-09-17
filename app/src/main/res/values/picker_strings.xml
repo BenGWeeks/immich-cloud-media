@@ -1,0 +1,16 @@
+<resources>
+    <string name="picker_title">Choose an Immich photo</string>
+    <string name="picker_cancel">Cancel</string>
+    <string name="picker_search_hint">Search photos, e.g. ginger cat</string>
+    <string name="picker_search">Search</string>
+    <string name="picker_more">Load more</string>
+    <string name="picker_sign_in">Sign in to Immich Cloud Photos, then return here.</string>
+    <string name="picker_loading">Loading photos…</string>
+    <string name="picker_empty">No matching photos.</string>
+    <string name="picker_choose">Tap a photo to attach it.</string>
+    <string name="picker_load_error">Couldn’t load photos. Check your connection and sign-in, then search again.</string>
+    <string name="picker_preparing">Preparing photo…</string>
+    <string name="picker_download_error">Couldn’t download that photo. Tap it to retry.</string>
+    <string name="picker_selected">Selected photo</string>
+    <string name="picker_select_photo">Select %1$s</string>
+</resources>
