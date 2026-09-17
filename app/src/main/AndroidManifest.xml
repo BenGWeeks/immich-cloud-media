@@ -24,6 +24,34 @@
       </intent-filter>
     </activity>
 
+    <activity
+      android:name=".ui.PhotoSelectionActivity"
+      android:label="Immich Photos"
+      android:exported="true">
+      <intent-filter>
+        <action android:name="android.intent.action.GET_CONTENT" />
+        <category android:name="android.intent.category.DEFAULT" />
+        <category android:name="android.intent.category.OPENABLE" />
+        <data android:mimeType="image/*" />
+        <data android:mimeType="vnd.android.cursor.dir/image" />
+      </intent-filter>
+      <intent-filter>
+        <action android:name="android.intent.action.PICK" />
+        <category android:name="android.intent.category.DEFAULT" />
+        <data android:mimeType="image/*" />
+        <data android:mimeType="vnd.android.cursor.dir/image" />
+      </intent-filter>
+    </activity>
+
+    <provider
+      android:name="androidx.core.content.FileProvider"
+      android:authorities="${applicationId}.attachments"
+      android:exported="false"
+      android:grantUriPermissions="true">
+      <meta-data android:name="android.support.FILE_PROVIDER_PATHS"
+        android:resource="@xml/attachment_paths" />
+    </provider>
+
     <provider
       android:name=".provider.ImmichCloudMediaProvider"
       android:authorities="${applicationId}.cloudmedia"
