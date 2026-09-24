@@ -1,6 +1,6 @@
 # Android attachment picker prototype
 
-Branch: `feature/whatsapp-picker`. Based on upstream PR #15 (`388815a`), the Immich v3 compatibility fix tested on this phone.
+This feature is independent of upstream PR #15. Initial device validation used a build including that v3 compatibility fix; the pull request contains only the attachment picker.
 
 ## Use from WhatsApp
 
@@ -15,6 +15,7 @@ This adds an external gallery choice; it does not replace Android’s system pic
 ## Implementation
 
 - Reuses the companion’s existing account and authenticated HTTP client.
+- Uses the companion’s Material 3 theme: filled indigo Search, outlined Load more and a compact Cancel text button.
 - Registers GET_CONTENT and PICK for image MIME types and the legacy `vnd.android.cursor.dir/image` contract needed for WhatsApp discovery.
 - Uses `/search/metadata` for recent photos, `/search/smart` for queries, 30 results per page and Load more.
 - Downloads thumbnails with four concurrent workers; downloads the original only after selection.

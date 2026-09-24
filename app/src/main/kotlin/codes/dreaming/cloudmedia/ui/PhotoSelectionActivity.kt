@@ -55,45 +55,31 @@ class PhotoSelectionActivity : AppCompatActivity() {
             isAppearanceLightStatusBars = lightTheme
             isAppearanceLightNavigationBars = lightTheme
         }
-        val root = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(24, 12, 24, 12)
-        }
+        setContentView(R.layout.activity_photo_selection)
+        val root = findViewById<View>(R.id.picker_root)
+        val horizontalPadding = (16 * resources.displayMetrics.density).toInt()
+        val verticalPadding = (8 * resources.displayMetrics.density).toInt()
         ViewCompat.setOnApplyWindowInsetsListener(root) { view, insets ->
             val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
-            view.setPadding(24 + bars.left, 12 + bars.top, 24 + bars.right, 12 + bars.bottom)
+            view.setPadding(horizontalPadding + bars.left, verticalPadding + bars.top,
+                horizontalPadding + bars.right, verticalPadding + bars.bottom)
             insets
         }
-        root.addView(TextView(this).apply { text = getString(R.string.picker_title); textSize = 22f })
-        root.addView(Button(this).apply { text = getString(R.string.picker_cancel); setOnClickListener { finish() } })
-        search = EditText(this).apply {
-            hint = getString(R.string.picker_search_hint)
-            setSingleLine()
-            imeOptions = EditorInfo.IME_ACTION_SEARCH
-            setOnEditorActionListener { _, action, _ ->
-                if (action == EditorInfo.IME_ACTION_SEARCH) { startSearch(); true } else false
-            }
+        findViewById<Button>(R.id.picker_cancel).setOnClickListener { finish() }
+        search = findViewById(R.id.picker_query)
+        search.setOnEditorActionListener { _, action, _ ->
+            if (action == EditorInfo.IME_ACTION_SEARCH) { startSearch(); true } else false
         }
-        root.addView(search)
-        root.addView(Button(this).apply { text = getString(R.string.picker_search); setOnClickListener { startSearch() } })
-        status = TextView(this).apply { textSize = 16f }
-        root.addView(status)
+        findViewById<Button>(R.id.picker_search).setOnClickListener { startSearch() }
+        status = findViewById(R.id.picker_status)
         adapter = PhotoAdapter()
-        grid = GridView(this).apply {
-            numColumns = 3
-            verticalSpacing = 8
-            horizontalSpacing = 8
+        grid = findViewById<GridView>(R.id.picker_grid).apply {
             adapter = this@PhotoSelectionActivity.adapter
             setOnItemClickListener { _, _, position, _ -> selectPhoto(photos[position]) }
         }
-        root.addView(grid, LinearLayout.LayoutParams(-1, 0, 1f))
-        more = Button(this).apply {
-            text = getString(R.string.picker_more)
-            visibility = View.GONE
+        more = findViewById<Button>(R.id.picker_more).apply {
             setOnClickListener { loadPage(page + 1) }
         }
-        root.addView(more)
-        setContentView(root)
     }
 
     override fun onResume() {
@@ -109,6 +95,9 @@ class PhotoSelectionActivity : AppCompatActivity() {
 
     private fun startSearch() {
         if (downloading || !ApiClient.isLoggedIn) return
+        androidx.core.view.WindowCompat.getInsetsController(window, search)
+            .hide(WindowInsetsCompat.Type.ime())
+        search.clearFocus()
         query = search.text.toString().trim()
         loadPage(1)
     }
