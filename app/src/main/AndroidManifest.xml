@@ -26,7 +26,7 @@
 
     <activity
       android:name=".ui.PhotoSelectionActivity"
-      android:label="Immich Photos"
+      android:label="@string/picker_app_name"
       android:exported="true">
       <intent-filter>
         <action android:name="android.intent.action.GET_CONTENT" />
