@@ -9,9 +9,13 @@
     <string name="picker_loading">Loading photos…</string>
     <string name="picker_empty">No matching photos.</string>
     <string name="picker_choose">Tap a photo to attach it.</string>
-    <string name="picker_load_error">Couldn’t load photos. Check your connection and sign-in, then search again.</string>
+    <string name="picker_load_error">Couldn’t load photos. Check your connection and sign-in, tap Retry.</string>
     <string name="picker_preparing">Preparing photo…</string>
     <string name="picker_download_error">Couldn’t download that photo. Tap it to retry.</string>
     <string name="picker_selected">Selected photo</string>
     <string name="picker_select_photo">Select %1$s</string>
+    <string name="picker_retry">Retry</string>
+    <string name="picker_more_matches">No matches in this batch. Load more to keep looking.</string>
+    <string name="picker_metadata_notice">Shares the original file, including any embedded metadata such as location.</string>
+    <string name="picker_app_name">Immich Photos</string>
 </resources>
