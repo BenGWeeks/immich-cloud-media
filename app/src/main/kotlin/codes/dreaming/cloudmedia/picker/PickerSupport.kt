@@ -14,10 +14,12 @@ import kotlin.coroutines.resumeWithException
 internal suspend fun <T> Call.consume(block: (Response) -> T): T = suspendCancellableCoroutine { continuation ->
     continuation.invokeOnCancellation { cancel() }
     enqueue(object : Callback {
+        /** Propagates transport failures only while the caller is still awaiting a result. */
         override fun onFailure(call: Call, e: IOException) {
             if (continuation.isActive) continuation.resumeWithException(e)
         }
 
+        /** Closes every response and consumes its body before completing the cancellable continuation. */
         override fun onResponse(call: Call, response: Response) {
             try {
                 response.use {
@@ -33,9 +35,11 @@ internal suspend fun <T> Call.consume(block: (Response) -> T): T = suspendCancel
     })
 }
 
+/** Normalizes a concrete image MIME type; rejects absent, non-image and wildcard values. */
 internal fun imageMime(value: String?): String? = value?.substringBefore(';')?.trim()?.lowercase()
     ?.takeIf { it.startsWith("image/") && it.substringAfter('/').matches(Regex("[a-z0-9.+-]+")) }
 
+/** Matches a concrete MIME type against the calling app’s exact or wildcard filters. */
 internal fun acceptsMime(mime: String, filters: List<String>): Boolean = filters.any { filter ->
     val normalized = filter.lowercase()
     normalized == "*/*" || normalized == mime || normalized == "${mime.substringBefore('/')}/*"
@@ -64,10 +68,14 @@ internal class PickerPaging {
         private set
     var failed = false
         private set
+    /** Starts a new search at page one and clears the previous retry state. */
     fun reset() { nextPage = 1; failed = false }
+    /** Commits the server’s next cursor after a successful fetch; null means the search is exhausted. */
     fun success(next: Int?) { nextPage = next; failed = false }
+    /** Enables retry without advancing the cursor of the failed request. */
     fun failure() { failed = true }
 }
 
+/** Prevents original attachments from being duplicated in the shared HTTP disk cache. */
 internal fun Request.withoutDiskCache(): Request = newBuilder()
     .cacheControl(CacheControl.Builder().noStore().build()).build()
