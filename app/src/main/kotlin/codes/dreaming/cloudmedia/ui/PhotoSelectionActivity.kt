@@ -50,6 +50,7 @@ class PhotoSelectionActivity : AppCompatActivity() {
     private var loadGeneration = 0
     private var acceptedTypes = listOf("image/*")
     private val bitmapCache = object : LruCache<String, Bitmap>(16 * 1024 * 1024) {
+        /** Accounts for decoded bitmap bytes so the cache limit remains independent of image count. */
         override fun sizeOf(key: String, value: Bitmap) = value.byteCount
     }
     private val thumbnailJobs = mutableSetOf<Job>()
@@ -59,6 +60,7 @@ class PhotoSelectionActivity : AppCompatActivity() {
     private var query = ""
     private var loaded = false
 
+    /** Validates the caller’s image filters and binds the picker controls with system-bar insets. */
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setResult(RESULT_CANCELED)
@@ -103,6 +105,7 @@ class PhotoSelectionActivity : AppCompatActivity() {
         }
     }
 
+    /** Loads the library after sign-in and removes the temporary sign-in action from the status label. */
     override fun onResume() {
         super.onResume()
         if (!::status.isInitialized) return
@@ -120,6 +123,7 @@ class PhotoSelectionActivity : AppCompatActivity() {
         }
     }
 
+    /** Submits the current text as a new search and dismisses the keyboard without changing selection. */
     private fun startSearch() {
         if (downloading || !ApiClient.isLoggedIn) return
         androidx.core.view.WindowCompat.getInsetsController(window, search)
@@ -129,17 +133,20 @@ class PhotoSelectionActivity : AppCompatActivity() {
         loadPage(1)
     }
 
+    /** Preserves the visible query for reload after recreation; result and download state are not retained. */
     override fun onSaveInstanceState(outState: Bundle) {
         if (::search.isInitialized) outState.putString("picker_query", search.text.toString())
         super.onSaveInstanceState(outState)
     }
 
+    /** Shows pagination or retry only when a cursor remains and no page request is running. */
     private fun updateMoreButton() {
         more.visibility = if (!loading && paging.nextPage != null) View.VISIBLE else View.GONE
         more.isEnabled = !downloading
         more.setText(if (paging.failed) R.string.picker_retry else R.string.picker_more)
     }
 
+    /** Loads a filtered batch, preserving its cursor on failure and ignoring cleanup from superseded jobs. */
     private fun loadPage(requestedPage: Int) {
         if (downloading) return
         queryJob?.cancel()
@@ -180,6 +187,7 @@ class PhotoSelectionActivity : AppCompatActivity() {
         }
     }
 
+    /** Fetches timeline images and filters server-reported MIME types before returning the server cursor. */
     private suspend fun fetchPhotos(text: String, page: Int): PickerPage<Photo> {
         val url = ApiClient.buildUrl(if (text.isBlank()) "/search/metadata" else "/search/smart")
             ?: throw IOException("Not signed in")
@@ -207,6 +215,7 @@ class PhotoSelectionActivity : AppCompatActivity() {
         }
     }
 
+    /** Returns one validated original through a read-granted URI, or restores selection after a download failure. */
     private fun selectPhoto(photo: Photo) {
         if (downloading) return
         downloading = true
@@ -238,6 +247,7 @@ class PhotoSelectionActivity : AppCompatActivity() {
         }
     }
 
+    /** Streams a size-limited original without HTTP caching, validates its MIME type and removes incomplete files on failure. */
     private suspend fun download(photo: Photo): Attachment {
         // Keep track of the file outside dispatcher/continuation hand-offs, including cancellation.
         val pending = AtomicReference<File?>()
@@ -294,9 +304,13 @@ class PhotoSelectionActivity : AppCompatActivity() {
     }
 
     private inner class PhotoAdapter : BaseAdapter() {
+        /** Includes only photos that passed the caller’s MIME filters and asset-ID deduplication. */
         override fun getCount() = photos.size
+        /** Returns the asset used to resolve the selected grid position to an original download. */
         override fun getItem(position: Int) = photos[position]
+        /** Uses positional IDs because each new search replaces the adapter’s result set. */
         override fun getItemId(position: Int) = position.toLong()
+        /** Reuses grid cells, cancels obsolete thumbnail jobs and sizes cells from their measured width. */
         override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
             val image = (convertView as? ImageView) ?: ImageView(this@PhotoSelectionActivity).apply {
                 scaleType = ImageView.ScaleType.CENTER_CROP
@@ -329,6 +343,7 @@ class PhotoSelectionActivity : AppCompatActivity() {
         }
     }
 
+    /** Decodes the server thumbnail within the cancellable response lifetime. */
     private suspend fun thumbnail(photo: Photo): Bitmap? {
         val url = ApiClient.buildUrl("/assets/${photo.id}/thumbnail")!!.newBuilder()
             .addQueryParameter("size", "thumbnail").build()
