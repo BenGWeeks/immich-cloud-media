@@ -1,7 +1,8 @@
 <resources>
-    <string name="picker_title">Choose an Immich photo</string>
+    <string name="picker_title">Choose a photo</string>
     <string name="picker_cancel">Cancel</string>
-    <string name="picker_search_hint">Search photos, e.g. ginger cat</string>
+    <string name="picker_search_label">Search photos</string>
+    <string name="picker_search_example">e.g. ginger cat</string>
     <string name="picker_search">Search</string>
     <string name="picker_more">Load more</string>
     <string name="picker_sign_in">Sign in to Immich Cloud Photos, then return here.</string>
