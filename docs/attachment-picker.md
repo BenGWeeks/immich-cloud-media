@@ -35,6 +35,7 @@ This adds an external gallery choice; it does not replace Android’s system pic
 - Searching **ginger cat** returned matching cat thumbnails.
 - Selecting a result opened `com.whatsapp/.mediacomposer.ui.app.MediaComposerActivity`, showing the photo, caption and Send controls.
 - Cancelled the preview. No message or photo sent.
+- Re-tested after the review fixes: ginger-cat search, Load more and returning a selected original to WhatsApp’s photo composer all passed on the Pixel.
 - `testDebugUnitTest assembleDebug lintDebug` passed, including 10 regression tests for MIME filtering, empty-page pagination, failed-page retries, cancellation before headers and during body reads, HTTP errors and no-store caching. See build reports locally; existing upstream warnings remain.
 
 ## Prototype scope / remaining work
