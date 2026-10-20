@@ -1,6 +1,7 @@
 package codes.dreaming.cloudmedia.ui
 
 import android.Manifest
+import android.content.ActivityNotFoundException
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Intent
@@ -11,7 +12,9 @@ import android.view.View
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import androidx.browser.customtabs.CustomTabsIntent
 import androidx.core.content.ContextCompat
+import androidx.core.net.toUri
 import androidx.lifecycle.lifecycleScope
 import codes.dreaming.cloudmedia.BuildConfig
 import codes.dreaming.cloudmedia.R
@@ -25,7 +28,8 @@ import rikka.shizuku.Shizuku
 
 class LoginActivity : AppCompatActivity() {
     private lateinit var binding: ActivityLoginBinding
-    private var useApiKey = false
+    private enum class AuthMode { API_KEY, PASSWORD, SSO }
+    private var authMode = AuthMode.PASSWORD
     private var pendingAction: (() -> Unit)? = null
 
     private val mediaPermissionLauncher = registerForActivityResult(
@@ -66,7 +70,7 @@ class LoginActivity : AppCompatActivity() {
         setContentView(binding.root)
 
         binding.toggleAuthMode.setOnClickListener {
-            useApiKey = !useApiKey
+            authMode = AuthMode.entries[(authMode.ordinal + 1) % AuthMode.entries.size]
             updateAuthModeUi()
         }
 
@@ -102,6 +106,7 @@ class LoginActivity : AppCompatActivity() {
         updateUiState()
         updateShizukuUi()
         updateMediaPermissionUi()
+        if (savedInstanceState == null) handleOAuthCallback(intent)
     }
 
     override fun onResume() {
@@ -189,14 +194,27 @@ class LoginActivity : AppCompatActivity() {
     }
 
     private fun updateAuthModeUi() {
-        if (useApiKey) {
-            binding.credentialsContainer.visibility = View.GONE
-            binding.apiKeyContainer.visibility = View.VISIBLE
-            binding.toggleAuthMode.text = getString(R.string.use_credentials)
-        } else {
-            binding.credentialsContainer.visibility = View.VISIBLE
-            binding.apiKeyContainer.visibility = View.GONE
-            binding.toggleAuthMode.text = getString(R.string.use_api_key)
+        when (authMode) {
+            AuthMode.API_KEY -> {
+                binding.credentialsContainer.visibility = View.GONE
+                binding.apiKeyContainer.visibility = View.VISIBLE
+                binding.toggleAuthMode.text = getString(R.string.use_credentials)
+                binding.loginButton.text = getString(R.string.login_button)
+            }
+
+            AuthMode.PASSWORD -> {
+                binding.credentialsContainer.visibility = View.VISIBLE
+                binding.apiKeyContainer.visibility = View.GONE
+                binding.toggleAuthMode.text = getString(R.string.use_sso)
+                binding.loginButton.text = getString(R.string.login_button)
+            }
+
+            AuthMode.SSO -> {
+                binding.credentialsContainer.visibility = View.GONE
+                binding.apiKeyContainer.visibility = View.GONE
+                binding.toggleAuthMode.text = getString(R.string.use_api_key)
+                binding.loginButton.text = getString(R.string.login_button_sso)
+            }
         }
     }
 
@@ -221,9 +239,13 @@ class LoginActivity : AppCompatActivity() {
 
         setLoading(true)
 
+        if (authMode == AuthMode.SSO) {
+            startSsoFlow(serverUrl)
+            return
+        }
         lifecycleScope.launch {
             val result = withContext(Dispatchers.IO) {
-                if (useApiKey) {
+                if (authMode == AuthMode.API_KEY) {
                     val apiKey = binding.apiKeyInput.text?.toString()?.trim() ?: ""
                     ApiClient.loginWithApiKey(serverUrl, apiKey)
                 } else {
@@ -290,5 +312,38 @@ class LoginActivity : AppCompatActivity() {
         val clipboard = getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
         clipboard.setPrimaryClip(ClipData.newPlainText("ADB command", text))
         Toast.makeText(this, R.string.copied_to_clipboard, Toast.LENGTH_SHORT).show()
+    }
+
+    private fun startSsoFlow(serverUrl: String) {
+        lifecycleScope.launch {
+            val result = withContext(Dispatchers.IO) { ApiClient.startOAuthLogin(serverUrl) }
+            setLoading(false)
+            result.onSuccess { authUrl ->
+                try {
+                    CustomTabsIntent.Builder().build().launchUrl(this@LoginActivity, authUrl.toUri())
+                } catch (e: ActivityNotFoundException) {
+                    showError(getString(R.string.login_error, e.message))
+                }
+            }.onFailure { e -> showError(getString(R.string.login_error, e.message)) }
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        handleOAuthCallback(intent)
+    }
+
+    private fun handleOAuthCallback(intent: Intent?) {
+        val data = intent?.data ?: return
+        if (intent.action != Intent.ACTION_VIEW || data.scheme != "app.immich") return
+        // Clear the callback so a later resume or recreation does not replay the one-time code.
+        setIntent(Intent(this, LoginActivity::class.java))
+        setLoading(true)
+        lifecycleScope.launch {
+            val result = withContext(Dispatchers.IO) { ApiClient.finishOAuthLogin(data.toString()) }
+            setLoading(false)
+            result.onSuccess { updateUiState() }
+                .onFailure { e -> showError(getString(R.string.login_error, e.message)) }
+        }
     }
 }
