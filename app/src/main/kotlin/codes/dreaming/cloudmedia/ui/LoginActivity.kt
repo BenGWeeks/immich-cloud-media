@@ -13,6 +13,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
+import codes.dreaming.cloudmedia.BuildConfig
 import codes.dreaming.cloudmedia.R
 import codes.dreaming.cloudmedia.databinding.ActivityLoginBinding
 import codes.dreaming.cloudmedia.network.ApiClient
@@ -72,9 +73,9 @@ class LoginActivity : AppCompatActivity() {
         binding.loginButton.setOnClickListener { performLogin() }
         binding.logoutButton.setOnClickListener { performLogout() }
 
-        binding.copyEnableCommand.setOnClickListener {
-            copyToClipboard(getString(R.string.adb_enable_command))
-        }
+        val enableCommand = getString(R.string.adb_enable_command, BuildConfig.APPLICATION_ID)
+        binding.enableCommandText.text = enableCommand
+        binding.copyEnableCommand.setOnClickListener { copyToClipboard(enableCommand) }
         binding.copyDisableCommand.setOnClickListener {
             copyToClipboard(getString(R.string.adb_disable_command))
         }
