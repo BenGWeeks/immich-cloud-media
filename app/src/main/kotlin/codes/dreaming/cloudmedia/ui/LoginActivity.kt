@@ -8,6 +8,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Bundle
+import android.security.KeyChain
 import android.view.View
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
@@ -73,6 +74,8 @@ class LoginActivity : AppCompatActivity() {
             authMode = AuthMode.entries[(authMode.ordinal + 1) % AuthMode.entries.size]
             updateAuthModeUi()
         }
+
+        binding.certificateButton.setOnClickListener { selectCertificate() }
 
         binding.loginButton.setOnClickListener { performLogin() }
         binding.logoutButton.setOnClickListener { performLogout() }
@@ -227,7 +230,34 @@ class LoginActivity : AppCompatActivity() {
             binding.loginForm.visibility = View.VISIBLE
             binding.connectedContainer.visibility = View.GONE
         }
+        updateCertificateButton(ApiClient.certificateAlias)
         binding.errorText.visibility = View.GONE
+    }
+
+    private fun updateCertificateButton(alias: String?) {
+        binding.certificateButton.text =
+            if (alias == null) {
+                getString(R.string.certificate_button)
+            } else {
+                getString(R.string.certificate_selected, alias)
+            }
+    }
+
+    private fun selectCertificate() {
+        KeyChain.choosePrivateKeyAlias(
+            this,
+            { alias ->
+                if (alias != null) {
+                    ApiClient.certificateAlias = alias
+                    runOnUiThread { updateCertificateButton(alias) }
+                }
+            },
+            null,
+            null,
+            binding.serverUrlInput.text?.toString()?.trim()?.let { Uri.parse(it).host },
+            -1,
+            ApiClient.certificateAlias,
+        )
     }
 
     private fun performLogin() {
@@ -236,7 +266,6 @@ class LoginActivity : AppCompatActivity() {
             showError(getString(R.string.server_url_required))
             return
         }
-
         setLoading(true)
 
         if (authMode == AuthMode.SSO) {
@@ -245,7 +274,9 @@ class LoginActivity : AppCompatActivity() {
         }
         lifecycleScope.launch {
             val result = withContext(Dispatchers.IO) {
-                if (authMode == AuthMode.API_KEY) {
+                if (!ApiClient.hasUsableCertificate()) {
+                    Result.failure(Exception(getString(R.string.invalid_certificate)))
+                } else if (authMode == AuthMode.API_KEY) {
                     val apiKey = binding.apiKeyInput.text?.toString()?.trim() ?: ""
                     ApiClient.loginWithApiKey(serverUrl, apiKey)
                 } else {
@@ -316,7 +347,13 @@ class LoginActivity : AppCompatActivity() {
 
     private fun startSsoFlow(serverUrl: String) {
         lifecycleScope.launch {
-            val result = withContext(Dispatchers.IO) { ApiClient.startOAuthLogin(serverUrl) }
+            val result = withContext(Dispatchers.IO) {
+                if (!ApiClient.hasUsableCertificate()) {
+                    Result.failure(Exception(getString(R.string.invalid_certificate)))
+                } else {
+                    ApiClient.startOAuthLogin(serverUrl)
+                }
+            }
             setLoading(false)
             result.onSuccess { authUrl ->
                 try {

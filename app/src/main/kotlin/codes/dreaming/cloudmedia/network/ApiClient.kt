@@ -2,6 +2,7 @@ package codes.dreaming.cloudmedia.network
 
 import android.content.Context
 import android.content.SharedPreferences
+import android.security.KeyChain
 import android.util.Log
 import okhttp3.Cache
 import okhttp3.ConnectionPool
@@ -16,10 +17,20 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
 import java.io.File
+import java.net.Socket
+import java.security.KeyStore
 import java.security.MessageDigest
+import java.security.Principal
+import java.security.PrivateKey
 import java.security.SecureRandom
+import java.security.cert.X509Certificate
 import java.util.Base64
 import java.util.concurrent.TimeUnit
+import javax.net.ssl.SSLContext
+import javax.net.ssl.SSLSocket
+import javax.net.ssl.TrustManagerFactory
+import javax.net.ssl.X509KeyManager
+import javax.net.ssl.X509TrustManager
 
 private const val TAG = "ApiClient"
 private const val PREFS_NAME = "immich_cloud_media"
@@ -27,6 +38,7 @@ private const val KEY_SERVER_URL = "server_url"
 private const val KEY_ACCESS_TOKEN = "access_token"
 private const val KEY_API_KEY = "api_key"
 private const val KEY_ACCOUNT_NAME = "account_name"
+private const val KEY_CERTIFICATE_ALIAS = "certificate_alias"
 private const val KEY_OAUTH_STATE = "oauth_state"
 private const val KEY_OAUTH_VERIFIER = "oauth_code_verifier"
 
@@ -34,38 +46,56 @@ object ApiClient {
   private const val CACHE_SIZE_BYTES = 100L * 1024 * 1024
 
   private lateinit var prefs: SharedPreferences
-  private lateinit var client: OkHttpClient
+  @Volatile private lateinit var client: OkHttpClient
+  private lateinit var keyManager: KeyChainKeyManager
+  private lateinit var cache: Cache
   private var initialized = false
 
   fun initialize(context: Context) {
     if (initialized) return
     synchronized(this) {
       if (initialized) return
+
       val appContext = context.applicationContext
       prefs = appContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+      keyManager = KeyChainKeyManager(appContext)
 
-      val cacheDir = File(appContext.cacheDir, "okhttp_api")
-      client = OkHttpClient.Builder()
-        .cookieJar(TokenCookieJar())
-        .addInterceptor { chain ->
-          val original = chain.request()
-          val builder = original.newBuilder()
-          getApiKey()?.let { builder.header("x-api-key", it) }
-          getAccessToken()?.let {
-            builder.header("Cookie", "immich_access_token=$it; immich_is_authenticated=true")
-          }
-          chain.proceed(builder.build())
-        }
-        .connectionPool(ConnectionPool(5, 5, TimeUnit.MINUTES))
-        .dispatcher(Dispatcher().apply { maxRequestsPerHost = 32 })
-        .cache(Cache(cacheDir.apply { mkdirs() }, CACHE_SIZE_BYTES))
-        .build()
-
+      cache = Cache(File(appContext.cacheDir, "okhttp_api").apply { mkdirs() }, CACHE_SIZE_BYTES)
+      client = buildClient()
       initialized = true
     }
   }
 
   fun getClient(): OkHttpClient = client
+
+  private fun buildClient(): OkHttpClient {
+    return OkHttpClient.Builder()
+      .clientCertificates(keyManager)
+      .cookieJar(TokenCookieJar())
+      .addInterceptor { chain ->
+        val original = chain.request()
+        val builder = original.newBuilder()
+        getApiKey()?.let { builder.header("x-api-key", it) }
+        getAccessToken()?.let {
+          builder.header("Cookie", "immich_access_token=$it; immich_is_authenticated=true")
+        }
+        chain.proceed(builder.build())
+      }
+      .connectionPool(ConnectionPool(5, 5, TimeUnit.MINUTES))
+      .dispatcher(Dispatcher().apply { maxRequestsPerHost = 32 })
+      .cache(cache)
+      .build()
+  }
+
+  // A new SSLContext drops TLS sessions resumed with the previous client certificate.
+  private fun replaceClient() {
+    val old = client
+    client = buildClient()
+    old.connectionPool.evictAll()
+  }
+
+  // Call off the main thread.
+  fun hasUsableCertificate(): Boolean = certificateAlias?.let { keyManager.isUsable(it) } ?: true
 
   var serverUrl: String?
     get() = prefs.getString(KEY_SERVER_URL, null)?.trimEnd('/')
@@ -74,6 +104,14 @@ object ApiClient {
   var accountName: String?
     get() = prefs.getString(KEY_ACCOUNT_NAME, null)
     set(value) = prefs.edit().putString(KEY_ACCOUNT_NAME, value).apply()
+
+  var certificateAlias: String?
+    get() = prefs.getString(KEY_CERTIFICATE_ALIAS, null)
+    set(value) {
+      prefs.edit().putString(KEY_CERTIFICATE_ALIAS, value).apply()
+      keyManager.forget()
+      replaceClient()
+    }
 
   val isLoggedIn: Boolean
     get() = serverUrl != null && (getAccessToken() != null || getApiKey() != null)
@@ -95,7 +133,10 @@ object ApiClient {
       .remove(KEY_ACCESS_TOKEN)
       .remove(KEY_API_KEY)
       .remove(KEY_ACCOUNT_NAME)
+      .remove(KEY_CERTIFICATE_ALIAS)
       .apply()
+    keyManager.forget()
+    replaceClient()
   }
 
   fun buildUrl(path: String): HttpUrl? {
@@ -269,6 +310,55 @@ object ApiClient {
     } catch (e: Exception) {
       Log.e(TAG, "fetchAndSaveAccountName error", e)
     }
+  }
+
+  // KeyChain blocks and must not run on the main thread, so the key loads during the TLS handshake.
+  private class KeyChainKeyManager(private val context: Context) : X509KeyManager {
+    @Volatile private var loaded: Pair<String, Pair<PrivateKey, Array<X509Certificate>>?>? = null
+
+    private fun entry(alias: String): Pair<PrivateKey, Array<X509Certificate>>? {
+      loaded?.let { (cached, value) -> if (cached == alias) return value }
+      val value = try {
+        val key = KeyChain.getPrivateKey(context, alias)
+        val chain = KeyChain.getCertificateChain(context, alias)
+        if (key != null && chain != null) key to chain else null
+      } catch (e: Exception) {
+        Log.e(TAG, "Failed to load client certificate", e)
+        null
+      }
+      if (value != null) loaded = alias to value
+      return value
+    }
+
+    fun isUsable(alias: String): Boolean = entry(alias) != null
+
+    fun forget() { loaded = null }
+
+    // A redirect can lead to another host, so only the configured server gets the certificate.
+    override fun chooseClientAlias(keyType: Array<out String>?, issuers: Array<out Principal>?, socket: Socket?): String? {
+      val peerHost = (socket as? SSLSocket)?.handshakeSession?.peerHost ?: socket?.inetAddress?.hostName
+      if (peerHost == null || !peerHost.equals(serverUrl?.toHttpUrlOrNull()?.host, ignoreCase = true)) return null
+      return certificateAlias?.takeIf { entry(it) != null }
+    }
+
+    override fun getClientAliases(keyType: String?, issuers: Array<out Principal>?): Array<String>? = null
+
+    override fun getPrivateKey(alias: String?): PrivateKey? = alias?.let { entry(it)?.first }
+
+    override fun getCertificateChain(alias: String?): Array<X509Certificate>? = alias?.let { entry(it)?.second }
+
+    override fun chooseServerAlias(keyType: String?, issuers: Array<out Principal>?, socket: Socket?): String? = null
+
+    override fun getServerAliases(keyType: String?, issuers: Array<out Principal>?): Array<String>? = null
+  }
+
+  private fun OkHttpClient.Builder.clientCertificates(keyManager: X509KeyManager): OkHttpClient.Builder {
+    val trustManagerFactory = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm())
+    trustManagerFactory.init(null as KeyStore?)
+    val trustManager = trustManagerFactory.trustManagers.filterIsInstance<X509TrustManager>().first()
+    val sslContext = SSLContext.getInstance("TLS")
+    sslContext.init(arrayOf(keyManager), arrayOf(trustManager), null)
+    return sslSocketFactory(sslContext.socketFactory, trustManager)
   }
 
   private class TokenCookieJar : CookieJar {
