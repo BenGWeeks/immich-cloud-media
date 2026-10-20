@@ -1,45 +1,28 @@
-# Android attachment picker prototype
+# Attachment picker
 
-This feature is independent of upstream PR #15. Initial device validation used a build including that v3 compatibility fix; the pull request contains only the attachment picker.
+Some apps, such as WhatsApp, offer their own gallery screen with a list of other apps. The **Immich Photos** entry there opens a search screen for your Immich library and returns one original photo to the app.
 
-## Use from WhatsApp
+<img src="screenshots/picker-after.jpg" width="360" alt="Immich Photos search results for ginger cat">
 
-1. Sign in using the companion’s existing launcher screen.
-2. In a WhatsApp chat choose **Attach → Gallery → Recents → More apps → Immich Photos**.
-3. Browse recent photos or enter a smart-search query and press **Search**.
-4. Tap one result. The original downloads and opens in WhatsApp’s photo preview.
-5. Review the recipient and send manually, or cancel.
+This picker does not need the ADB command for the system photo picker. It uses the account you signed in with in the companion app.
 
-This adds an external gallery choice; it does not replace Android’s system picker or WhatsApp’s first gallery screen. No system-picker activation flag or special ADB allowlist is needed for this attachment activity.
+## Use it from WhatsApp
 
-## Implementation
+1. Sign in on the companion app's main screen.
+2. In a chat, choose **Attach**, **Gallery**, **Recents**, **More apps**, then **Immich Photos**.
+3. Scroll recent photos, or type a search and tap **Search**. Search uses Immich smart search.
+4. Tap a photo. The app downloads the original and WhatsApp opens its normal preview.
 
-- Reuses the companion’s existing account and authenticated HTTP client.
-- Uses the companion’s Material 3 theme: filled indigo Search, outlined Load more and a compact Cancel text button.
-- Registers GET_CONTENT and PICK for image MIME types and the legacy `vnd.android.cursor.dir/image` contract needed for WhatsApp discovery.
-- Uses `/search/metadata` for recent photos, `/search/smart` for queries, 30 results per page and Load more.
-- Downloads thumbnails with four cancellable network workers and a 16 MiB memory cache; downloads the original only after selection.
-- Filters using the server-reported image MIME type, then checks the downloaded file with Android’s decoder where supported. Unknown types are not guessed as JPEG, and the returned URI extension/MIME type match the identified format. Unsupported original formats fail rather than being silently relabelled.
-- Retains pagination cursors after errors and offers Retry. Advances past filtered-out pages, with a ten-page batch limit and a continuation message if more searching is needed. Suppresses duplicate asset IDs between pages.
-- Shows a persistent notice that originals retain embedded metadata, including location when present. This picker does not strip EXIF or transcode originals.
-- Original requests use `no-store` to avoid a duplicate copy in the HTTP cache. Picker requests reject redirects so authentication headers cannot be forwarded to a different host.
-- Returns a FileProvider content URI, MIME type, ClipData and a read-only URI grant. The provider is not exported, and only its attachments cache subtree is exposed.
-- Random filenames avoid server filename path traversal. Originals are limited to 100 MiB. Failed or cancelled downloads are removed. Completed cache entries older than 24 hours are pruned on the next selection.
-- No public release key or account credentials are stored in the repository.
+## What it does
 
-## Validation on Pixel 8 / GrapheneOS
+- It registers for `GET_CONTENT` and `PICK` with `image/*`. WhatsApp only lists apps that also register `vnd.android.cursor.dir/image`, so the picker registers both.
+- It loads 30 photos per page. A caller that asks for specific image types sees only photos of those types.
+- It returns a read-only content URI for the selected file. The file provider is not exported and exposes only the attachment cache folder.
+- It sends the original with its metadata, including GPS location when the photo has it. The screen says so.
+- It removes cached originals older than 24 hours on the next selection, and refuses originals over 100 MiB.
 
-- Debug APK updates the existing PR15 test companion without losing its login.
-- Android resolves the new image selection activity.
-- WhatsApp initially omitted image/*-only registration. Adding the legacy image-directory contract made **Immich Photos** appear under More apps.
-- Searching **ginger cat** returned matching cat thumbnails.
-- Selecting a result opened `com.whatsapp/.mediacomposer.ui.app.MediaComposerActivity`, showing the photo, caption and Send controls.
-- Cancelled the preview. No message or photo sent.
-- Re-tested after the review fixes: ginger-cat search, Load more and returning a selected original to WhatsApp’s photo composer all passed on the Pixel.
-- `testDebugUnitTest assembleDebug lintDebug` passed, including 10 regression tests for MIME filtering, empty-page pagination, failed-page retries, cancellation before headers and during body reads, HTTP errors and no-store caching. See build reports locally; existing upstream warnings remain.
+## Limits
 
-## Prototype scope / remaining work
-
-Single photos only. Multi-selection, videos, albums, restoration of results/scroll position and in-progress downloads after recreation, richer loading UI and broader device testing remain future work. The search text is restored and reloaded after recreation. Search can return semantically similar photos. Only this WhatsApp/Pixel flow has been validated; other apps need testing.
-
-The previously considered modern system picker activation is unrelated to this activity and remains unavailable via the phone’s ADB flag allowlist.
+- One photo at a time. Videos, albums and multiple selection are not supported.
+- After a rotation the search text comes back and the results reload.
+- It has been tested with WhatsApp on a Pixel 8 running GrapheneOS. Other apps may need their own checks.

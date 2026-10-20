@@ -9,7 +9,7 @@
     <string name="picker_loading">Loading photos…</string>
     <string name="picker_empty">No matching photos.</string>
     <string name="picker_choose">Tap a photo to attach it.</string>
-    <string name="picker_load_error">Couldn’t load photos. Check your connection and sign-in, tap Retry.</string>
+    <string name="picker_load_error">Couldn’t load photos. Check your connection and sign-in, then tap Retry.</string>
     <string name="picker_preparing">Preparing photo…</string>
     <string name="picker_download_error">Couldn’t download that photo. Tap it to retry.</string>
     <string name="picker_selected">Selected photo</string>

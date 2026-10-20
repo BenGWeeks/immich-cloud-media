@@ -18,7 +18,6 @@ import java.util.concurrent.TimeUnit
 class PickerSupportTest {
     @get:Rule val temporary = TemporaryFolder()
 
-    /** Rejects unknown types and verifies that narrow caller filters do not admit incompatible originals. */
     @Test fun unknownMimeIsNotInventedAsJpeg() {
         assertNull(imageMime(null))
         assertNull(imageMime(""))
@@ -30,7 +29,6 @@ class PickerSupportTest {
         assertTrue(acceptsMime("image/png", listOf("application/pdf", "image/png")))
     }
 
-    /** Exercises skipped server page numbers so filtering cannot silently replace the server cursor with an increment. */
     @Test fun filteredPagesAreSkippedWithoutLosingTheServerCursor() = runBlocking {
         val requested = mutableListOf<Int>()
         val page = visiblePage(1) {
@@ -42,14 +40,12 @@ class PickerSupportTest {
         assertEquals(4, page.nextPage)
     }
 
-    /** Ensures an exhausted empty search does not keep offering more pages. */
     @Test fun noMatchesStopsAtEndOfLibrary() = runBlocking {
         val page = visiblePage<String>(1) { PickerPage(emptyList(), null) }
         assertTrue(page.items.isEmpty())
         assertNull(page.nextPage)
     }
 
-    /** Limits work for narrow MIME filters while retaining a continuation for the next user request. */
     @Test fun emptyBatchIsBoundedAndRetainsContinuation() = runBlocking {
         var calls = 0
         val page = visiblePage<String>(1) { calls++; PickerPage(emptyList(), it + 1) }
@@ -57,7 +53,6 @@ class PickerSupportTest {
         assertEquals(11, page.nextPage)
     }
 
-    /** Simulates a network failure and verifies that retry fetches the same page before advancing state. */
     @Test fun failedPageRetriesWithoutAdvancingCursor() = runBlocking {
         val paging = PickerPaging()
         paging.success(3)
@@ -75,7 +70,6 @@ class PickerSupportTest {
         assertEquals(1, paging.nextPage)
     }
 
-    /** Rejects a non-advancing server cursor before it can cause repeated requests. */
     @Test fun repeatedServerCursorFailsRatherThanLooping() = runBlocking {
         try {
             visiblePage<String>(2) { PickerPage(emptyList(), 2) }
@@ -83,7 +77,6 @@ class PickerSupportTest {
         } catch (_: IllegalArgumentException) { /* expected */ }
     }
 
-    /** Uses a non-responsive server to verify cancellation releases a request awaiting headers. */
     @Test fun cancelBeforeHeadersCancelsTheNetworkCall() = runBlocking {
         MockWebServer().use { server ->
             server.enqueue(MockResponse().setSocketPolicy(SocketPolicy.NO_RESPONSE))
@@ -95,7 +88,6 @@ class PickerSupportTest {
         }
     }
 
-    /** Uses a throttled body to verify cancellation remains connected after headers arrive. */
     @Test fun cancelWhileReadingBodyCancelsTheNetworkCall() = runBlocking {
         MockWebServer().use { server ->
             server.enqueue(MockResponse().setBody("abcdefgh").throttleBody(1, 1, TimeUnit.SECONDS))
@@ -108,7 +100,6 @@ class PickerSupportTest {
         }
     }
 
-    /** Ensures an authentication error body cannot be treated as a successful image response. */
     @Test fun failedHttpResponseIsNotReturnedAsAnImage() = runBlocking {
         MockWebServer().use { server ->
             server.enqueue(MockResponse().setResponseCode(401).setBody("unauthorized"))
@@ -119,7 +110,6 @@ class PickerSupportTest {
         }
     }
 
-    /** Checks repeated cacheable responses still bypass storage when requesting original attachments. */
     @Test fun originalDownloadsDoNotPopulateSharedHttpCache() = runBlocking {
         MockWebServer().use { server ->
             Cache(temporary.newFolder("cache"), 1024 * 1024).use { cache ->
