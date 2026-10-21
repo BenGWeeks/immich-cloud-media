@@ -81,6 +81,17 @@ object ApiClient {
         }
         chain.proceed(builder.build())
       }
+      // OkHttp copies these headers onto redirects, so drop them when a redirect leaves the server or drops TLS.
+      .addNetworkInterceptor { chain ->
+        val request = chain.request()
+        val server = serverUrl?.toHttpUrlOrNull()
+        val sameHost = request.url.host.equals(server?.host, ignoreCase = true)
+        if (sameHost && (request.url.isHttps || server?.isHttps == false)) {
+          chain.proceed(request)
+        } else {
+          chain.proceed(request.newBuilder().removeHeader("x-api-key").removeHeader("Cookie").build())
+        }
+      }
       .connectionPool(ConnectionPool(5, 5, TimeUnit.MINUTES))
       .dispatcher(Dispatcher().apply { maxRequestsPerHost = 32 })
       .cache(cache)
