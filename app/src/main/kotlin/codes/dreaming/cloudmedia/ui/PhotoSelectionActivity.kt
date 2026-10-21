@@ -53,9 +53,6 @@ class PhotoSelectionActivity : AppCompatActivity() {
         override fun sizeOf(key: String, value: Bitmap) = value.byteCount
     }
     private val thumbnailJobs = mutableSetOf<Job>()
-    private val pickerClient by lazy {
-        ApiClient.getClient().newBuilder().followRedirects(false).followSslRedirects(false).build()
-    }
     private var query = ""
     private var loaded = false
 
@@ -188,7 +185,7 @@ class PhotoSelectionActivity : AppCompatActivity() {
         if (text.isNotBlank()) body.put("query", text)
         val request = Request.Builder().url(url)
             .post(body.toString().toRequestBody("application/json".toMediaType())).build()
-        return pickerClient.newCall(request).consume { response ->
+        return ApiClient.getClient().newCall(request).consume { response ->
             val assets = JSONObject(response.body?.string() ?: throw IOException("Empty response"))
                 .getJSONObject("assets")
             val items = assets.getJSONArray("items")
@@ -250,7 +247,7 @@ class PhotoSelectionActivity : AppCompatActivity() {
             }
             val file = pending.get() ?: throw IOException("Cannot create attachment")
             val url = ApiClient.buildUrl("/assets/${photo.id}/original") ?: throw IOException("Not signed in")
-            val call = pickerClient.newCall(Request.Builder().url(url).build().withoutDiskCache())
+            val call = ApiClient.getClient().newCall(Request.Builder().url(url).build().withoutDiskCache())
             val responseMime = call.consume { response ->
                 val body = response.body ?: throw IOException("No image")
                 if (body.contentLength() > MAX_BYTES) throw IOException("Image too large")
@@ -332,7 +329,7 @@ class PhotoSelectionActivity : AppCompatActivity() {
     private suspend fun thumbnail(photo: Photo): Bitmap? {
         val url = ApiClient.buildUrl("/assets/${photo.id}/thumbnail")!!.newBuilder()
             .addQueryParameter("size", "thumbnail").build()
-        return pickerClient.newCall(Request.Builder().url(url).build()).consume { response ->
+        return ApiClient.getClient().newCall(Request.Builder().url(url).build()).consume { response ->
             response.body?.byteStream()?.use { BitmapFactory.decodeStream(it) }
         }
     }
